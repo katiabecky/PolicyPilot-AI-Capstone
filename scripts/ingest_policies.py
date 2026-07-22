@@ -16,7 +16,7 @@ for f in policy_files:
 
     documents.append(document)
 
-chunks = []
+raw_chunks = []
 
 for doc in documents:
     parts = doc["content"].split("## ")
@@ -31,19 +31,35 @@ for doc in documents:
         section_title = lines[0].strip()
         section_content = "\n".join(lines[1:]).strip()
 
-        chunk = {
+        raw_chunk = {
             "filename": doc["filename"],
             "section_title": section_title,
             "content": section_content
         }
 
-        chunks.append(chunk)
+        raw_chunks.append(raw_chunk)
+
+clean_chunks = []
+
+for i, chunk in enumerate(raw_chunks, start=1):
+    cleaned_content = " ".join(chunk["content"].split())
+
+    clean_chunk = {
+        "chunk_id": f"{Path(chunk['filename']).stem}_{i}",
+        "filename": chunk["filename"],
+        "section_title": chunk["section_title"],
+        "content": cleaned_content
+    }
+
+    clean_chunks.append(clean_chunk)
 
 print(f"Loaded {len(documents)} documents.")
-print(f"Created {len(chunks)} chunks.\n")
+print(f"Created {len(raw_chunks)} raw chunks.")
+print(f"Created {len(clean_chunks)} cleaned chunks.\n")
 
-for chunk in chunks[:10]:
+for chunk in clean_chunks[:10]:
     print("=" * 50)
+    print(f"Chunk ID: {chunk['chunk_id']}")
     print(f"Filename: {chunk['filename']}")
     print(f"Section: {chunk['section_title']}")
     print(f"Character count: {len(chunk['content'])}")
