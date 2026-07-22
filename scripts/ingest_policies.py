@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 policy_folder = Path("data/policies")
 policy_files = list(policy_folder.glob("*.md"))
@@ -53,11 +54,17 @@ for i, chunk in enumerate(raw_chunks, start=1):
 
     clean_chunks.append(clean_chunk)
 
+output_path = Path("data/clean_chunks.json")
+
+with open(output_path, "w", encoding="utf-8") as json_file:
+    json.dump(clean_chunks, json_file, indent=2)
+
 print(f"Loaded {len(documents)} documents.")
 print(f"Created {len(raw_chunks)} raw chunks.")
-print(f"Created {len(clean_chunks)} cleaned chunks.\n")
+print(f"Created {len(clean_chunks)} cleaned chunks.")
+print(f"Saved cleaned chunks to: {output_path}\n")
 
-for chunk in clean_chunks[:10]:
+for chunk in clean_chunks[:5]:
     print("=" * 50)
     print(f"Chunk ID: {chunk['chunk_id']}")
     print(f"Filename: {chunk['filename']}")
