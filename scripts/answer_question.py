@@ -1,4 +1,50 @@
+import json
+from pathlib import Path
+
 import chromadb
+from chromadb.errors import NotFoundError
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+CHROMA_DIR = BASE_DIR / "chroma_db"
+CHUNKS_FILE = BASE_DIR / "data" / "clean_chunks.json"
+COLLECTION_NAME = "policy_chunks"
+
+
+def load_chunks_from_json():
+    with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_or_create_policy_collection():
+    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
+
+    try:
+        collection = client.get_collection(name=COLLECTION_NAME)
+        if collection.count() > 0:
+            return collection
+    except NotFoundError:
+        collection = client.create_collection(name=COLLECTION_NAME)
+    else:
+        # Collection exists but is empty; refill it.
+        pass
+
+    chunks = load_chunks_from_json()
+
+    ids = [chunk["chunk_id"] for chunk in chunks]
+    documents = [chunk["content"] for chunk in chunks]
+    metadatas = [
+        {
+            "filename": chunk.get("filename", ""),
+            "section_title": chunk.get("section_title", "")
+        }
+        for chunk in chunks
+    ]
+
+    if collection.count() == 0:
+        collection.add(ids=ids, documents=documents, metadatas=metadatas)
+
+    return collection
 
 
 def is_generic_chunk(doc, meta):
@@ -33,11 +79,9 @@ def score_chunk(query, doc, meta):
 
     score = 0
 
-    # Penalize generic/header chunks
     if is_generic_chunk(doc, meta):
         score -= 3
 
-    # Reward section-title matches
     important_terms = q.replace("?", "").split()
     for term in important_terms:
         if term in section:
@@ -45,24 +89,20 @@ def score_chunk(query, doc, meta):
         if term in text:
             score += 1
 
-    # Heuristic boost for vacation allowance vs carryover
     if "vacation" in q and "days" in q:
         if "annual vacation allowance" in section:
             score += 5
         if "carryover" in section:
             score -= 2
 
-    # Heuristic boost for password requirement questions
     if "password" in q:
         if "password requirements" in section:
             score += 5
 
-    # Heuristic boost for expense submission questions
     if "expense" in q or "reimbursement" in q:
         if "submission process" in section:
             score += 5
 
-    # Heuristic boost for harassment/reporting questions
     if "harassment" in q or "suspect harassment" in q:
         if "anti-harassment" in section or "reporting concerns" in section:
             score += 4
@@ -82,11 +122,9 @@ def is_out_of_scope(query, results):
 
     scores = [score_chunk(query, d, m) for d, m in zip(docs, metas)]
 
-    # If all scores are weak, refuse
     if max(scores) < 2:
         return True
 
-    # If most results are generic headers, refuse
     generic_count = sum(is_generic_chunk(d, m) for d, m in zip(docs, metas))
     if generic_count >= 2:
         return True
@@ -124,8 +162,7 @@ def print_sources(scored_results):
 
 
 def answer_question(query, n_results=3):
-    client = chromadb.PersistentClient(path="chroma_db")
-    collection = client.get_collection(name="policy_chunks")
+    collection = get_or_create_policy_collection()
 
     results = collection.query(
         query_texts=[query],
