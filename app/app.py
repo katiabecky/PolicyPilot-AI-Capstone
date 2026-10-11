@@ -1,5 +1,54 @@
-import streamlit as st
+import json
+from pathlib import Path
+
 import chromadb
+import streamlit as st
+from chromadb.errors import NotFoundError
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+CHROMA_DIR = BASE_DIR / "chroma_db"
+CHUNKS_FILE = BASE_DIR / "data" / "clean_chunks.json"
+COLLECTION_NAME = "policy_chunks"
+
+
+# -----------------------------
+# Collection setup
+# -----------------------------
+def load_chunks_from_json():
+    with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def get_or_create_policy_collection():
+    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
+
+    try:
+        collection = client.get_collection(name=COLLECTION_NAME)
+        if collection.count() > 0:
+            return collection
+    except NotFoundError:
+        collection = client.create_collection(name=COLLECTION_NAME)
+    else:
+        # Collection exists but is empty; refill it.
+        pass
+
+    chunks = load_chunks_from_json()
+
+    ids = [chunk["chunk_id"] for chunk in chunks]
+    documents = [chunk["content"] for chunk in chunks]
+    metadatas = [
+        {
+            "filename": chunk.get("filename", ""),
+            "section_title": chunk.get("section_title", "")
+        }
+        for chunk in chunks
+    ]
+
+    if collection.count() == 0:
+        collection.add(ids=ids, documents=documents, metadatas=metadatas)
+
+    return collection
 
 
 # -----------------------------
@@ -114,8 +163,7 @@ def build_direct_answer(best_doc, best_meta):
 
 
 def answer_question(query, n_results=3):
-    client = chromadb.PersistentClient(path="chroma_db")
-    collection = client.get_collection(name="policy_chunks")
+    collection = get_or_create_policy_collection()
 
     results = collection.query(
         query_texts=[query],
@@ -159,20 +207,25 @@ if st.button("Ask PolicyPilot"):
     if not question.strip():
         st.warning("Please enter a question before submitting.")
     else:
-        result = answer_question(question)
+        try:
+            with st.spinner("Searching policy documents..."):
+                result = answer_question(question)
 
-        st.markdown("## Answer")
-        if result["supported"]:
-            st.success(result["answer"])
+            st.markdown("## Answer")
+            if result["supported"]:
+                st.success(result["answer"])
 
-            st.markdown("## Sources")
-            for i, (_, doc, meta, chunk_id) in enumerate(result["sources"], start=1):
-                st.markdown(
-                    f"**{i}. {meta['filename']}** — {meta['section_title']}  \n"
-                    f"`Chunk ID: {chunk_id}`"
-                )
-                with st.expander(f"View source excerpt {i}"):
-                    st.write(doc)
-        else:
-            st.error(result["answer"])
-            st.info("Try asking about company policies such as vacation, expenses, remote work, conduct, or IT security.")
+                st.markdown("## Sources")
+                for i, (_, doc, meta, chunk_id) in enumerate(result["sources"], start=1):
+                    st.markdown(
+                        f"**{i}. {meta['filename']}** — {meta['section_title']}  \n"
+                        f"`Chunk ID: {chunk_id}`"
+                    )
+                    with st.expander(f"View source excerpt {i}"):
+                        st.write(doc)
+            else:
+                st.error(result["answer"])
+                st.info("Try asking about company policies such as vacation, expenses, remote work, conduct, or IT security.")
+        except Exception as e:
+            st.error(f"The app ran into an error while searching the policy database: {e}")
+            st.info("If this is the first run after deployment, try refreshing once after a few seconds while the policy collection initializes.")
