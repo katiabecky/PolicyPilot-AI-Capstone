@@ -35,7 +35,6 @@ The current MVP supports:
 - What is the company stock price?
 - Who is the CEO’s assistant?
 - What is the office Wi-Fi password today?
-- Can you tell me today’s Wi-Fi password?
 
 ## Project Structure
 - `app/` — Streamlit application layer
@@ -51,7 +50,7 @@ The current MVP supports:
 - Streamlit
 - ChromaDB
 - Markdown policy corpus
-- local retrieval pipeline / vector search
+- Local retrieval pipeline / vector search
 
 ## Current Status
 Completed:
@@ -63,14 +62,14 @@ Completed:
 - retrieval testing completed
 - unsupported-question refusal logic added
 - Streamlit MVP built and validated
+- Streamlit deployment fixed and validated
 - capstone draft documentation created
 - agile task board prepared
 
 Remaining final submission work:
-- deploy the Streamlit app
-- add the public deployment link
 - record final presentation
 - run final submission QA
+- submit final capstone package
 
 ## How to Run Locally
 
